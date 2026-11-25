@@ -65,6 +65,12 @@
       background: var(--bg); color: var(--text); font-size: 11px; font-family: var(--mono); cursor: pointer;
     }
     .mini-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 8px; }
+    .preset-btn {
+      height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px;
+      background: var(--bg); color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+    }
+    .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
     @media (max-width: 780px) {
       .mx-row { grid-template-columns: 1fr auto; }
     }
@@ -84,13 +90,21 @@
     </header>
 
     <section class="panel">
-      <h2 class="panel-title">1-Click Spawn Identity</h2>
-      <p class="hint">Otomatis membuat inbox di InboxStealth / menyurat.me, meng-generate username &amp; password kuat, serta mengaktifkan live 2FA TOTP.</p>
+      <h2 class="panel-title">⚡ 1-Click Auto-Spawn Identity</h2>
+      <p class="hint">Klik preset di bawah untuk langsung membuat inbox di InboxStealth / menyurat.me, meng-generate username &amp; password 18-karakter, serta mengaktifkan live 2FA TOTP dalam 1 klik.</p>
+      <div class="presets">
+        <span style="font-size:12px;color:var(--muted);font-weight:600">1-Klik Instan:</span>
+        <button type="button" class="preset-btn" data-quick="Claude (Anthropic)" data-days="0">⚡ + Claude</button>
+        <button type="button" class="preset-btn" data-quick="OpenAI" data-days="0">⚡ + OpenAI</button>
+        <button type="button" class="preset-btn" data-quick="Cursor" data-days="14">⚡ + Cursor (14d)</button>
+        <button type="button" class="preset-btn" data-quick="Mistral AI" data-days="0">⚡ + Mistral AI</button>
+        <button type="button" class="preset-btn" data-quick="AWS" data-days="0">⚡ + AWS</button>
+        <button type="button" class="preset-btn" data-quick="GitHub" data-days="0">⚡ + GitHub</button>
+        <button type="button" class="preset-btn" data-quick="Steam" data-days="0">⚡ + Steam</button>
+        <button type="button" class="preset-btn" data-quick="Vercel" data-days="0">⚡ + Vercel</button>
+      </div>
       <div class="grid-form">
-        <input id="fService" placeholder="Layanan (mis. Steam, GitHub, Cursor)">
-        <input id="fTag" placeholder="Tag (mis. #Alt-01, #Trial)">
         <input id="fDomain" placeholder="Domain (mis. example.com)">
-        <input id="fLocal" placeholder="Nama lokal (kosong = acak)">
         <select id="fTrial">
           <option value="0">Permanen (Active)</option>
           <option value="3">Trial 3 hari</option>
@@ -98,14 +112,20 @@
           <option value="14">Trial 14 hari</option>
           <option value="30">Trial 30 hari</option>
         </select>
+        <input id="fService" placeholder="Atau ketik layanan lain (mis. Discord, Supabase)…">
+        <button class="btn btn-primary" id="spawnBtn" type="button">⚡ Spawn Akun</button>
       </div>
-      <div class="grid-form">
-        <input id="fUser" placeholder="Username (kosong = otomatis)">
-        <input id="fPass" placeholder="Password (kosong = auto 18-char)">
-        <input id="fTotp" placeholder="2FA TOTP Secret / otpauth://">
-        <input id="fOpsec" placeholder="Catatan OPSEC (Brave #3 · Proxy SG)">
-        <button class="btn btn-primary" id="spawnBtn" type="button">+ Spawn Akun</button>
-      </div>
+      <details style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px">
+        <summary style="font-size:12px;color:var(--muted);cursor:pointer">⚙️ Opsi Kustom / Input Manual (Tag, Nama Email, Username, Password, 2FA TOTP, Catatan OPSEC)</summary>
+        <div class="grid-form">
+          <input id="fTag" placeholder="Tag (mis. #Alt-01, #Trial)">
+          <input id="fLocal" placeholder="Nama lokal (kosong = acak)">
+          <input id="fUser" placeholder="Username (kosong = otomatis)">
+          <input id="fPass" placeholder="Password (kosong = auto 18-char)">
+          <input id="fTotp" placeholder="2FA TOTP Secret / otpauth://">
+          <input id="fOpsec" placeholder="Catatan OPSEC (Brave #3 · Proxy SG)">
+        </div>
+      </details>
     </section>
 
     <div class="toolbar">
@@ -207,8 +227,9 @@
         }));
     }
 
-    $("spawnBtn").addEventListener("click", async () => {
-      const service = $("fService").value.trim();
+    async function spawn(presetSvc, presetDays) {
+      const isPreset = typeof presetSvc === "string" && presetSvc.length > 0;
+      const service = isPreset ? presetSvc : $("fService").value.trim();
       if (!service) return;
       await api("/api/accounts", {
         method: "POST",
@@ -217,7 +238,7 @@
           tag: $("fTag").value.trim(),
           domain: $("fDomain").value.trim(),
           local: $("fLocal").value.trim(),
-          trial_days: Number($("fTrial").value),
+          trial_days: (isPreset && presetDays !== undefined) ? Number(presetDays) : Number($("fTrial").value),
           username: $("fUser").value.trim(),
           password: $("fPass").value.trim(),
           totp_secret: $("fTotp").value.trim(),
@@ -226,7 +247,10 @@
       });
       for (const id of ["fService", "fTag", "fLocal", "fUser", "fPass", "fTotp", "fOpsec"]) $(id).value = "";
       load();
-    });
+    }
+    $("spawnBtn").addEventListener("click", () => spawn());
+    document.querySelectorAll("[data-quick]").forEach((b) =>
+      b.addEventListener("click", () => spawn(b.dataset.quick, b.dataset.days)));
     $("qInput").addEventListener("input", render);
     $("stFilter").addEventListener("change", render);
     $("refreshBtn").addEventListener("click", load);
