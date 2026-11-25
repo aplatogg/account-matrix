@@ -56,13 +56,33 @@ function json(data, status = 200, headers = {}) {
 }
 
 function extractOtp(subject, textBody, htmlBody) {
-  const plainHtml = htmlBody ? String(htmlBody).replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ") : "";
-  const combined = `${subject || ""}\n${textBody || ""}\n${plainHtml}`.slice(0, 16000);
-  const ctxRe = /(?:otp|kode|code|verifikasi|verification|pin|passcode|token|sandi|confirm|security)[^0-9A-Za-z]{0,28}\b([0-9]{4,8})\b/gi;
+  const subj = String(subject || "").trim();
+  const plainHtml = htmlBody
+    ? String(htmlBody)
+        .replace(/<!--[\s\S]*?-->/g, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<head[\s\S]*?<\/head>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+    : "";
+  const rawTxt = String(textBody || "");
+  const cssPolluted = /@font-face|\bbox-sizing\s*:|mso-table-lspace|\bmargin\s*:\s*0/i.test(rawTxt);
+  const body = ((cssPolluted && plainHtml) ? plainHtml : (rawTxt || plainHtml))
+    .replace(/#[0-9a-fA-F]{3,8}\b/g, " ")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .slice(0, 12000);
+  const combined = `${subj}\n${body}`;
+  const hasCtx = /\b(otp|kode|code|pin|verifikasi|verification|verify|passcode|token|authenticat|masuk|login|sign[\s-]?in|confirm|konfirmasi|sandi|password|security|aktivasi|activate)\b/i.test(combined);
+  if (!hasCtx) return null;
+
+  const ctxRe = /\b(?:otp|kode|code|verifikasi|verification|login\s*code|sign[-\s]?in\s*code|pin|passcode|token|sandi|confirm|security)\b[^0-9A-Za-z\n]{0,32}\b([0-9]{4,8})\b/gi;
   let m;
   while ((m = ctxRe.exec(combined)) !== null) {
     if (!/^(19\d\d|20[2-3]\d)$/.test(m[1])) return m[1];
   }
+  const beforeRe = /\b(\d{4,8})\b[^0-9A-Za-z\n]{0,24}\b(?:adalah\s+kode|is\s+your\s+(?:verification|security|login|sign[-\s]?in|confirmation|one-time|temporary)?\s*(?:code|otp|pin))\b/i.exec(combined);
+  if (beforeRe) return beforeRe[1];
+
   const sixRe = /\b([0-9]{6})\b/g;
   while ((m = sixRe.exec(combined)) !== null) {
     if (!/^(19\d\d|20[2-3]\d|000000)$/.test(m[1])) return m[1];
@@ -71,14 +91,20 @@ function extractOtp(subject, textBody, htmlBody) {
 }
 
 function extractMagicLink(textBody, htmlBody) {
-  const src = `${htmlBody || ""}\n${textBody || ""}`.slice(0, 32000);
+  const src = `${htmlBody || ""}\n${textBody || ""}`.slice(0, 48000);
   const re = /https?:\/\/[^\s"'<>)\]]+/gi;
-  const skipRe = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?|ico)(\?|$)|unsubscribe|privacy|terms|mailto:|w3\.org/i;
-  const hitRe = /(verify|confirm|activate|magic|token=|code=|auth|login|verifikasi|aktivasi|reset|accept|invite|validate|callback)/i;
+  const skipHostRe = /^(click|links?|trk|track|metrics|pixel|open|ablink|email\.mg|url\d+)\.|mandrillapp\.com|sendgrid\.net|list-manage\.com|aklamio\.com/i;
+  const skipRe = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?|ttf|eot|ico|pdf)(\?|$)|unsubscribe|privacy|terms|help\.|support\.|status\.|mailto:|w3\.org/i;
+  const hitRe = /([?&](token|code|key|ticket|magic|verify|confirmation|access_token)=|\/verify\/|\/confirm\/|\/activate\/|\/magic[-_]?link|\/auth\/callback|\/reset[-_]?password)/i;
   let m;
   while ((m = re.exec(src)) !== null) {
     const u = m[0].replace(/[.,;:'")\]>]+$/, "").replace(/&amp;/g, "&");
-    if (u.length >= 16 && !skipRe.test(u) && hitRe.test(u)) return u;
+    if (u.length < 24 || skipRe.test(u)) continue;
+    try {
+      const host = new URL(u).hostname.toLowerCase();
+      if (skipHostRe.test(host) && !hitRe.test(u)) continue;
+    } catch { continue; }
+    if (hitRe.test(u)) return u;
   }
   return null;
 }
