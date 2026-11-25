@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>AccountMatrix — Multi-Account, 2FA TOTP &amp; Trial Radar</title>
+  <style>
+    :root {
+      --bg: #0c0e12; --surface: #13171f; --raised: #1a202c; --border: #262f3f;
+      --text: #e6edf3; --muted: #8b949e; --accent: #38bdf8;
+      --ok-bg: rgba(16,185,129,.15); --ok-fg: #34d399;
+      --warn-bg: rgba(245,158,11,.15); --warn-fg: #fbbf24;
+      --err-bg: rgba(239,68,68,.15); --err-fg: #f87171;
+      --mono: "JetBrains Mono", Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13.5px; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 60px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+    .brand span { color: var(--muted); font-size: 12.5px; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .panel-title { margin: 0 0 6px; font-size: 14.5px; font-weight: 600; }
+    .hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+    .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 10px; margin-top: 10px; }
+    input, select {
+      height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text); font-size: 13px; width: 100%;
+    }
+    input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .btn {
+      height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--raised); color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #06131a; border-color: var(--accent); }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .toolbar input { flex: 1 1 260px; }
+    .toolbar select { flex: 0 1 180px; }
+    .mx-list { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .mx-row {
+      display: grid; grid-template-columns: minmax(150px,1.1fr) minmax(220px,1.5fr) 138px 180px auto;
+      gap: 12px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border);
+    }
+    .mx-row:first-child { border-top: 0; }
+    .mx-row:hover { background: var(--raised); }
+    .chip { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--raised); color: var(--muted); }
+    .chip.ok { background: var(--ok-bg); color: var(--ok-fg); }
+    .chip.wait { background: var(--warn-bg); color: var(--warn-fg); }
+    .chip.no { background: var(--err-bg); color: var(--err-fg); }
+    .mono { font-family: var(--mono); }
+    .totp-pill {
+      display: inline-flex; align-items: center; justify-content: space-between; width: 128px;
+      height: 28px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--accent); font-family: var(--mono); font-weight: 700; cursor: pointer;
+    }
+    .otp-pill {
+      display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px;
+      border-radius: 6px; background: var(--ok-bg); color: var(--ok-fg); border: 0;
+      font-family: var(--mono); font-weight: 700; cursor: pointer;
+    }
+    .mini-btn {
+      height: 23px; padding: 0 7px; border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg); color: var(--text); font-size: 11px; font-family: var(--mono); cursor: pointer;
+    }
+    .mini-btn:hover { border-color: var(--accent); color: var(--accent); }
+    @media (max-width: 780px) {
+      .mx-row { grid-template-columns: 1fr auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>⚡ AccountMatrix</h1>
+        <span>Multi-Account Identity Vault · Live 2FA TOTP · InboxStealth OTP Bridge</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="apiKeyInput" type="password" placeholder="X-Matrix-Key (opsional)" style="width:190px">
+        <button class="btn" id="refreshBtn" type="button">🔄 Refresh</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2 class="panel-title">1-Click Spawn Identity</h2>
+      <p class="hint">Otomatis membuat inbox di InboxStealth / menyurat.me, meng-generate username &amp; password kuat, serta mengaktifkan live 2FA TOTP.</p>
+      <div class="grid-form">
+        <input id="fService" placeholder="Layanan (mis. Steam, GitHub, Cursor)">
+        <input id="fTag" placeholder="Tag (mis. #Alt-01, #Trial)">
+        <input id="fDomain" placeholder="Domain (mis. example.com)">
+        <input id="fLocal" placeholder="Nama lokal (kosong = acak)">
+        <select id="fTrial">
+          <option value="0">Permanen (Active)</option>
+          <option value="3">Trial 3 hari</option>
+          <option value="7">Trial 7 hari</option>
+          <option value="14">Trial 14 hari</option>
+          <option value="30">Trial 30 hari</option>
+        </select>
+      </div>
+      <div class="grid-form">
+        <input id="fUser" placeholder="Username (kosong = otomatis)">
+        <input id="fPass" placeholder="Password (kosong = auto 18-char)">
+        <input id="fTotp" placeholder="2FA TOTP Secret / otpauth://">
+        <input id="fOpsec" placeholder="Catatan OPSEC (Brave #3 · Proxy SG)">
+        <button class="btn btn-primary" id="spawnBtn" type="button">+ Spawn Akun</button>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <input id="qInput" type="search" placeholder="Cari layanan, tag, email, username, atau catatan OPSEC…">
+      <select id="stFilter">
+        <option value="all">Semua status</option>
+        <option value="active">Active</option>
+        <option value="trial">Trial</option>
+        <option value="cooldown">Cooldown</option>
+        <option value="burned">Burned</option>
+      </select>
+    </div>
+
+    <div class="mx-list" id="rowsWrap"></div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    let accounts = [];
+
+    function api(path, opts = {}) {
+      const key = ($("apiKeyInput").value || localStorage.getItem("matrix.key") || "").trim();
+      if (key) localStorage.setItem("matrix.key", key);
+      const headers = Object.assign({ "content-type": "application/json" }, opts.headers || {});
+      if (key) headers["x-matrix-key"] = key;
+      return fetch(path, Object.assign({}, opts, { headers })).then(async (r) => {
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+        return j;
+      });
+    }
+
+    async function load() {
+      try {
+        const j = await api("/api/accounts");
+        accounts = j.accounts || [];
+        if (!$("fDomain").value && j.default_domain) $("fDomain").value = j.default_domain;
+        render();
+      } catch (e) {
+        $("rowsWrap").innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted)">Gagal memuat: ${esc(e.message)}</div>`;
+      }
+    }
+
+    function render() {
+      const q = ($("qInput").value || "").trim().toLowerCase();
+      const st = $("stFilter").value;
+      const list = accounts.filter((a) => {
+        if (st !== "all" && a.status !== st) return false;
+        if (!q) return true;
+        return `${a.service} ${a.tag || ""} ${a.address} ${a.username || ""} ${a.opsec_note || ""}`.toLowerCase().includes(q);
+      });
+      if (!list.length) {
+        $("rowsWrap").innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted)">Belum ada akun di Matrix.</div>`;
+        return;
+      }
+      $("rowsWrap").innerHTML = list.map((a) => {
+        const totpFmt = a.totp_code ? `${a.totp_code.slice(0,3)} ${a.totp_code.slice(3)}` : "—";
+        return `<div class="mx-row">
+          <div>
+            <div style="font-weight:700">${esc(a.service)} ${a.tag ? `<span class="chip">${esc(a.tag)}</span>` : ""}</div>
+            <div style="margin-top:4px"><span class="chip ${a.status === 'burned' ? 'no' : a.status === 'trial' ? 'wait' : 'ok'}">${esc(a.status)}</span></div>
+            ${a.opsec_note ? `<div style="font-size:11.5px;color:var(--muted);margin-top:3px">🛡 ${esc(a.opsec_note)}</div>` : ""}
+          </div>
+          <div>
+            <div class="mono" style="font-weight:600;cursor:pointer" data-copy="${esc(a.address)}">${esc(a.address)}</div>
+            <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+              ${a.username ? `<button class="mini-btn" data-copy="${esc(a.username)}">👤 ${esc(a.username)}</button>` : ""}
+              ${a.password ? `<button class="mini-btn" data-copy="${esc(a.password)}">🔑 Sandi</button>` : ""}
+            </div>
+          </div>
+          <div>
+            ${a.totp_secret ? `<button class="totp-pill" data-copy="${esc(a.totp_code || "")}"><span>${esc(totpFmt)}</span><span style="font-size:11px;color:var(--muted)">${a.totp_rem || 30}s</span></button>` : `<span class="hint">No 2FA</span>`}
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            ${a.email_otp ? `<button class="otp-pill" data-copy="${esc(a.email_otp)}">🔑 ${esc(a.email_otp)}</button>` : `<span class="hint">Belum ada OTP</span>`}
+            <button class="mini-btn" data-pull="${esc(a.id)}">🔄</button>
+          </div>
+          <div>
+            <button class="mini-btn" data-del="${esc(a.id)}">✕</button>
+          </div>
+        </div>`;
+      }).join("");
+
+      $("rowsWrap").querySelectorAll("[data-copy]").forEach((el) =>
+        el.addEventListener("click", () => navigator.clipboard.writeText(el.dataset.copy)));
+      $("rowsWrap").querySelectorAll("[data-pull]").forEach((el) =>
+        el.addEventListener("click", async () => {
+          const j = await api(`/api/accounts/${encodeURIComponent(el.dataset.pull)}/otp`);
+          const idx = accounts.findIndex((x) => x.id === el.dataset.pull);
+          if (idx >= 0) { Object.assign(accounts[idx], j); render(); }
+          if (j.email_otp) navigator.clipboard.writeText(j.email_otp);
+        }));
+      $("rowsWrap").querySelectorAll("[data-del]").forEach((el) =>
+        el.addEventListener("click", async () => {
+          if (!confirm("Hapus akun ini?")) return;
+          await api(`/api/accounts/${encodeURIComponent(el.dataset.del)}`, { method: "DELETE" });
+          load();
+        }));
+    }
+
+    $("spawnBtn").addEventListener("click", async () => {
+      const service = $("fService").value.trim();
+      if (!service) return;
+      await api("/api/accounts", {
+        method: "POST",
+        body: JSON.stringify({
+          service,
+          tag: $("fTag").value.trim(),
+          domain: $("fDomain").value.trim(),
+          local: $("fLocal").value.trim(),
+          trial_days: Number($("fTrial").value),
+          username: $("fUser").value.trim(),
+          password: $("fPass").value.trim(),
+          totp_secret: $("fTotp").value.trim(),
+          opsec_note: $("fOpsec").value.trim(),
+        }),
+      });
+      for (const id of ["fService", "fTag", "fLocal", "fUser", "fPass", "fTotp", "fOpsec"]) $(id).value = "";
+      load();
+    });
+    $("qInput").addEventListener("input", render);
+    $("stFilter").addEventListener("change", render);
+    $("refreshBtn").addEventListener("click", load);
+    $("apiKeyInput").value = localStorage.getItem("matrix.key") || "";
+    load();
+  </script>
+</body>
+</html>
